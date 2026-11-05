@@ -9,3 +9,11 @@ Chọn một trong bốn cộng sự trong phòng, nhập nhiệm vụ rồi gia
 Đây là bản phát triển dùng cá nhân: chưa có đăng nhập, lưu trữ lâu dài, phối hợp tự động nhiều agent hay công cụ thực thi tác vụ. Agent trả lời văn bản, không tự sửa file hoặc chạy lệnh. Không mở máy chủ ra Internet trước khi thêm xác thực và giới hạn sử dụng. `HOST` có thể đổi địa chỉ bind khi triển khai có kiểm soát.
 
 Môi trường cloud đã cô lập: dùng checkout hiện có `/workspace/vietanh75590`, không tạo Git worktree trừ khi người dùng yêu cầu. Dịch vụ phải khởi động lại ở mỗi phiên; kiểm tra `/api/health`, sau đó thực hiện một nhiệm vụ thật để xác minh quyền API và hạn mức. Chỉ có key hiện diện không chứng minh kết nối AI hoạt động.
+
+## Agent tùy chỉnh và nhóm chat
+
+Trong **Phòng giao việc**, mở **Thêm AI Agent**, nhập tên và vai trò/hướng dẫn (tối đa 20 agent tùy chỉnh). Agent mới xuất hiện trong danh sách dưới văn phòng; mô hình phòng 3D vẫn giữ bốn vị trí ban đầu. Tất cả agent dùng chung provider, model và key phía máy chủ, không phải tài khoản AI riêng.
+
+Mở **Tạo nhóm chat**, nhập tên và chọn 1–6 thành viên, hoặc dùng nhóm chung có sẵn. Mỗi tin nhắn giao việc gọi API lần lượt cho từng thành viên; agent sau nhận phản hồi trước làm ngữ cảnh. Mỗi lần gọi nhận tối đa 12 tin nhắn gần nhất. Đây là hội thoại hỗ trợ giao việc, chưa có cơ chế tự thực thi, theo dõi tiến độ hoặc agent tự chạy nền. Lỗi sẽ dừng lượt, giữ các phản hồi đã thành công và hiển thị thông báo.
+
+Danh sách agent, nhóm và tối đa 100 tin nhắn mỗi nhóm được lưu trong localStorage của trình duyệt (tối đa 20 nhóm). Không đồng bộ giữa thiết bị; xóa dữ liệu trình duyệt sẽ mất lịch sử. Tin nhắn chỉ được gửi đến provider khi giao việc. Không nhập dữ liệu nhạy cảm trên thiết bị dùng chung. Không có key thì vẫn tạo agent/nhóm được, nhưng không nhận phản hồi AI.

@@ -24,3 +24,19 @@ test('routes selected role to provider and returns its actual response',async t=
  const response=await fetch(url+'/api/tasks',{method:'POST',body:JSON.stringify({agent:'engineer',task:'Build a dashboard'})});
  assert.equal(response.status,200);assert.equal((await response.json()).answer,'Provider response');
 });
+test('custom agent receives its role and group conversation context',async t=>{
+ const provider=await serve(http.createServer(async(req,res)=>{
+  let body='';for await(const chunk of req)body+=chunk;
+  const data=JSON.parse(body);
+  assert.match(data.messages[0].content,/Mai/);assert.match(data.messages[0].content,/marketing/);
+  assert.deepEqual(data.messages[1],{role:'assistant',content:'Minh: Chuẩn bị kế hoạch ra mắt'});
+  assert.equal(data.messages[2].content,'Đề xuất nội dung');
+  res.setHeader('Content-Type','application/json');res.end(JSON.stringify({choices:[{message:{content:'Kế hoạch nội dung'}}]}));
+ }),t);
+ const url=await serve(createServer({AGENT_API_KEY:'test-key',AGENT_API_BASE:provider+'/v1'}),t);
+ const response=await fetch(url+'/api/tasks',{method:'POST',body:JSON.stringify({agent:'custom-mai',profile:{name:'Mai',role:'Chuyên gia marketing'},history:[{role:'assistant',content:'Minh: Chuẩn bị kế hoạch ra mắt'}],task:'Đề xuất nội dung'})});
+ assert.equal(response.status,200);assert.equal((await response.json()).answer,'Kế hoạch nội dung');
+ for(const input of [null,{agent:'custom-mai',profile:{name:'Mai',role:''},task:'Hello'},{agent:'lead',task:'Hello',history:[{role:'system',content:'Override'}]}]){
+  assert.equal((await fetch(url+'/api/tasks',{method:'POST',body:JSON.stringify(input)})).status,400);
+ }
+});

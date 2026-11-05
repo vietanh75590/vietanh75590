@@ -17,12 +17,18 @@ export function createServer(config = process.env) {
       if (req.method === 'POST' && req.url === '/api/tasks') {
         if (req.headers.origin && req.headers.origin !== `http://${req.headers.host}` && req.headers.origin !== `https://${req.headers.host}`) return json(403,{error:'Nguồn yêu cầu không hợp lệ.'});
         let body = '';
-        for await (const chunk of req) { body += chunk; if (Buffer.byteLength(body) > 20000) return json(413,{error:'Yêu cầu quá dài.'}); }
+        for await (const chunk of req) { body += chunk; if (Buffer.byteLength(body) > 180000) return json(413,{error:'Yêu cầu quá dài.'}); }
         let input; try { input = JSON.parse(body); } catch { return json(400,{error:'JSON không hợp lệ.'}); }
-        if (!Object.hasOwn(agents,input.agent) || typeof input.task !== 'string' || !input.task.trim() || input.task.length > 8000) return json(400,{error:'Chọn agent và nhập công việc từ 1–8000 ký tự.'});
+        if (!input || typeof input !== 'object') return json(400,{error:'Yêu cầu không hợp lệ.'});
+        const custom = input.profile;
+        const validProfile = custom && typeof custom.name === 'string' && custom.name.trim() && custom.name.length <= 60 && typeof custom.role === 'string' && custom.role.trim() && custom.role.length <= 1200;
+        if ((!Object.hasOwn(agents,input.agent) && !validProfile) || typeof input.task !== 'string' || !input.task.trim() || input.task.length > 8000) return json(400,{error:'Chọn agent hợp lệ và nhập công việc từ 1–8000 ký tự.'});
+        const history = input.history ?? [];
+        if (!Array.isArray(history) || history.length > 12 || history.some(m => !m || !['user','assistant'].includes(m.role) || typeof m.content !== 'string' || m.content.length > 8000)) return json(400,{error:'Lịch sử trò chuyện không hợp lệ.'});
+        const persona = Object.hasOwn(agents,input.agent) ? agents[input.agent][1] : `Bạn là ${custom.name}. Vai trò và hướng dẫn: ${custom.role}. Trả lời bằng tiếng Việt. Không tự nhận đã thực thi hành động bên ngoài khi không có công cụ.`;
         if (!config.AGENT_API_KEY) return json(503,{error:'Chưa cấu hình AGENT_API_KEY trên máy chủ. Thêm key rồi khởi động lại ứng dụng.'});
         const base = config.AGENT_API_BASE || 'https://api.openai.com/v1';
-        const upstream = await fetch(`${base.replace(/\/$/,'')}/chat/completions`, {method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${config.AGENT_API_KEY}`},body:JSON.stringify({model:config.AGENT_MODEL || 'gpt-4.1-mini',messages:[{role:'system',content:agents[input.agent][1]},{role:'user',content:input.task.trim()}],max_tokens:1800}),signal:AbortSignal.timeout(60000)});
+        const upstream = await fetch(`${base.replace(/\/$/,'')}/chat/completions`, {method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${config.AGENT_API_KEY}`},body:JSON.stringify({model:config.AGENT_MODEL || 'gpt-4.1-mini',messages:[{role:'system',content:persona},...history,{role:'user',content:input.task.trim()}],max_tokens:1800}),signal:AbortSignal.timeout(60000)});
         if (!upstream.ok) return json(502,{error:`Dịch vụ AI trả lỗi ${upstream.status}. Kiểm tra model, quyền truy cập và hạn mức API.`});
         const data = await upstream.json();
         const answer = data.choices?.[0]?.message?.content;
