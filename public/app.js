@@ -33,7 +33,7 @@ document.querySelectorAll('.station').forEach(el => el.addEventListener('click',
 select(selected);
 $('#rotate').addEventListener('click',()=>$('.scene').classList.toggle('alternate'));
 $('#clear').addEventListener('click',()=>{$('#results').replaceChildren();$('#empty').hidden=false;});
-fetch('/api/health').then(r=>r.json()).then(data=>{$('#connection').textContent=data.configured?'Đã cấu hình kết nối AI':'Chưa cấu hình API key';$('#model').textContent=`Model: ${data.model}`;}).catch(()=>{$('#connection').textContent='Không kết nối được máy chủ';});
+fetch('/api/health').then(r=>r.json()).then(data=>{$('#connection').textContent=data.configured?'Đã cấu hình kết nối AI':'Chưa cấu hình API key';$('#model').textContent=`${data.provider === 'gemini' ? 'Google Gemini' : 'OpenAI / API tương thích'} · ${data.model}`;}).catch(()=>{$('#connection').textContent='Không kết nối được máy chủ';});
 $('#task-form').addEventListener('submit',async event=>{
   event.preventDefault(); const task = $('#task').value.trim(); if(!task)return;
   const agent = selected;

@@ -17,3 +17,11 @@ Trong **Phòng giao việc**, mở **Thêm AI Agent**, nhập tên và vai trò/
 Mở **Tạo nhóm chat**, nhập tên và chọn 1–6 thành viên, hoặc dùng nhóm chung có sẵn. Mỗi tin nhắn giao việc gọi API lần lượt cho từng thành viên; agent sau nhận phản hồi trước làm ngữ cảnh. Mỗi lần gọi nhận tối đa 12 tin nhắn gần nhất. Đây là hội thoại hỗ trợ giao việc, chưa có cơ chế tự thực thi, theo dõi tiến độ hoặc agent tự chạy nền. Lỗi sẽ dừng lượt, giữ các phản hồi đã thành công và hiển thị thông báo.
 
 Danh sách agent, nhóm và tối đa 100 tin nhắn mỗi nhóm được lưu trong localStorage của trình duyệt (tối đa 20 nhóm). Không đồng bộ giữa thiết bị; xóa dữ liệu trình duyệt sẽ mất lịch sử. Tin nhắn chỉ được gửi đến provider khi giao việc. Không nhập dữ liệu nhạy cảm trên thiết bị dùng chung. Không có key thì vẫn tạo agent/nhóm được, nhưng không nhận phản hồi AI.
+
+## Google Gemini
+
+Hỗ trợ Gemini API native cho mọi agent và nhóm chat. Trong Render → dịch vụ → Environment, thêm `AGENT_PROVIDER=gemini` và `GEMINI_API_KEY` (nhập giá trị riêng từ Google AI Studio tại https://aistudio.google.com/apikey). Có thể đặt `GEMINI_MODEL=gemini-2.5-flash` hoặc model GenerateContent khác mà tài khoản có quyền dùng. Lưu và triển khai lại. Không nhập key vào giao diện chat hoặc commit key vào Git.
+
+Nếu bỏ qua AGENT_PROVIDER, key Gemini có mặt sẽ ưu tiên Gemini; nếu đặt provider rõ ràng thì chỉ dùng provider đã chọn, không tự chuyển sang nhà cung cấp khác khi lỗi. AGENT_API_KEY/AGENT_MODEL chỉ dùng cho provider OpenAI. `/api/health` và giao diện hiển thị provider/model, không công khai key. Máy chủ gửi key Gemini qua header x-goog-api-key đến generativelanguage.googleapis.com với TLS. Cần cho phép domain này nếu môi trường hạn chế mạng. Key hiện diện không xác minh hạn mức hoặc quyền truy cập; kiểm tra bằng một nhiệm vụ thật sau khi cấu hình.
+
+Trang công khai hiện chưa có đăng nhập hoặc giới hạn sử dụng. Bảo vệ truy cập trước khi bật key trên Internet để tránh bị người khác dùng hạn mức API. Việc gọi Gemini có thể bị tính phí tùy tài khoản/model/hạn mức.

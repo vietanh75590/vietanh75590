@@ -40,3 +40,24 @@ test('custom agent receives its role and group conversation context',async t=>{
   assert.equal((await fetch(url+'/api/tasks',{method:'POST',body:JSON.stringify(input)})).status,400);
  }
 });
+test('Gemini sends key in header and maps role, history and response',async t=>{
+ const url=await serve(createServer({GEMINI_API_KEY:'gemini-test-key',AGENT_API_KEY:'unused'}, {fetcher:async(url,options)=>{
+  assert.equal(url,'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent');
+  assert.equal(options.headers['x-goog-api-key'],'gemini-test-key');assert.equal(options.headers.Authorization,undefined);
+  const data=JSON.parse(options.body);assert.match(data.systemInstruction.parts[0].text,/Mai/);
+  assert.deepEqual(data.contents,[{role:'user',parts:[{text:'Mục tiêu trước'}]},{role:'model',parts:[{text:'Minh: Kế hoạch'}]},{role:'user',parts:[{text:'Bổ sung ý kiến'}]}]);
+  return new Response(JSON.stringify({candidates:[{content:{parts:[{text:'Hidden',thought:true},{text:'Gemini trả lời'},{text:'Bước tiếp theo'}]}}]}));
+ }}),t);
+ const health=await (await fetch(url+'/api/health')).json();assert.equal(health.provider,'gemini');assert.equal(health.configured,true);assert.ok(!JSON.stringify(health).includes('gemini-test-key'));
+ const result=await fetch(url+'/api/tasks',{method:'POST',body:JSON.stringify({agent:'custom-mai',profile:{name:'Mai',role:'Marketing'},task:'Bổ sung ý kiến',history:[{role:'user',content:'Mục tiêu trước'},{role:'assistant',content:'Minh: Kế hoạch'}]})});
+ assert.equal(result.status,200);assert.equal((await result.json()).answer,'Gemini trả lời\nBước tiếp theo');
+});
+test('Gemini reports missing key, upstream errors and blocked content',async t=>{
+ const missing=await serve(createServer({AGENT_PROVIDER:'gemini',AGENT_API_KEY:'not-gemini'}),t);
+ const post=url=>fetch(url+'/api/tasks',{method:'POST',body:JSON.stringify({agent:'lead',task:'Hello'})});
+ const absent=await post(missing);assert.equal(absent.status,503);assert.match((await absent.json()).error,/GEMINI_API_KEY/);
+ for(const response of [new Response('{}',{status:429}),new Response(JSON.stringify({promptFeedback:{blockReason:'SAFETY'}}))]){
+  const url=await serve(createServer({GEMINI_API_KEY:'test'},{fetcher:async()=>response}),t);
+  const result=await post(url);assert.equal(result.status,502);assert.ok((await result.json()).error);
+ }
+});

@@ -9,11 +9,15 @@ export const agents = {
   analyst: ['Khoa', 'Bạn là chuyên gia phân tích AI. Phân biệt dữ kiện và giả định, không bịa nguồn hoặc số liệu. Trả lời bằng tiếng Việt.']
 };
 const assets = {'/':['index.html','text/html; charset=utf-8'], '/app.js':['app.js','text/javascript; charset=utf-8'], '/style.css':['style.css','text/css; charset=utf-8']};
-export function createServer(config = process.env) {
+export function createServer(config = process.env, {fetcher = fetch} = {}) {
+  const provider = config.AGENT_PROVIDER || (config.GEMINI_API_KEY ? 'gemini' : 'openai');
+  const supported = ['openai','gemini'].includes(provider);
+  const key = provider === 'gemini' ? config.GEMINI_API_KEY : config.AGENT_API_KEY;
+  const model = provider === 'gemini' ? (config.GEMINI_MODEL || 'gemini-2.5-flash') : (config.AGENT_MODEL || 'gpt-4.1-mini');
   return http.createServer(async (req, res) => {
     const json = (status, data) => { res.writeHead(status, {'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'}); res.end(JSON.stringify(data)); };
     try {
-      if (req.method === 'GET' && req.url === '/api/health') return json(200, {ok:true, configured:!!config.AGENT_API_KEY, model:config.AGENT_MODEL || 'gpt-4.1-mini'});
+      if (req.method === 'GET' && req.url === '/api/health') return json(200, {ok:true, configured:supported && !!key, provider, model});
       if (req.method === 'POST' && req.url === '/api/tasks') {
         if (req.headers.origin && req.headers.origin !== `http://${req.headers.host}` && req.headers.origin !== `https://${req.headers.host}`) return json(403,{error:'Nguồn yêu cầu không hợp lệ.'});
         let body = '';
@@ -26,12 +30,20 @@ export function createServer(config = process.env) {
         const history = input.history ?? [];
         if (!Array.isArray(history) || history.length > 12 || history.some(m => !m || !['user','assistant'].includes(m.role) || typeof m.content !== 'string' || m.content.length > 8000)) return json(400,{error:'Lịch sử trò chuyện không hợp lệ.'});
         const persona = Object.hasOwn(agents,input.agent) ? agents[input.agent][1] : `Bạn là ${custom.name}. Vai trò và hướng dẫn: ${custom.role}. Trả lời bằng tiếng Việt. Không tự nhận đã thực thi hành động bên ngoài khi không có công cụ.`;
-        if (!config.AGENT_API_KEY) return json(503,{error:'Chưa cấu hình AGENT_API_KEY trên máy chủ. Thêm key rồi khởi động lại ứng dụng.'});
+        if (!supported) return json(503,{error:'AGENT_PROVIDER phải là gemini hoặc openai.'});
+        if (!key) return json(503,{error:`Chưa cấu hình ${provider === 'gemini' ? 'GEMINI_API_KEY' : 'AGENT_API_KEY'} trên máy chủ. Thêm key trong Environment rồi triển khai lại.`});
         const base = config.AGENT_API_BASE || 'https://api.openai.com/v1';
-        const upstream = await fetch(`${base.replace(/\/$/,'')}/chat/completions`, {method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${config.AGENT_API_KEY}`},body:JSON.stringify({model:config.AGENT_MODEL || 'gpt-4.1-mini',messages:[{role:'system',content:persona},...history,{role:'user',content:input.task.trim()}],max_tokens:1800}),signal:AbortSignal.timeout(60000)});
-        if (!upstream.ok) return json(502,{error:`Dịch vụ AI trả lỗi ${upstream.status}. Kiểm tra model, quyền truy cập và hạn mức API.`});
+        const url = provider === 'gemini' ? `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent` : `${base.replace(/\/$/,'')}/chat/completions`;
+        const headers = provider === 'gemini' ? {'Content-Type':'application/json','x-goog-api-key':key} : {'Content-Type':'application/json','Authorization':`Bearer ${key}`};
+        const payload = provider === 'gemini' ? {
+          systemInstruction:{parts:[{text:persona}]},
+          contents:[...history,{role:'user',content:input.task.trim()}].map(m=>({role:m.role === 'assistant' ? 'model' : 'user',parts:[{text:m.content}]})),
+          generationConfig:{maxOutputTokens:4096}
+        } : {model,messages:[{role:'system',content:persona},...history,{role:'user',content:input.task.trim()}],max_tokens:1800};
+        const upstream = await fetcher(url, {method:'POST',headers,body:JSON.stringify(payload),signal:AbortSignal.timeout(60000)});
+        if (!upstream.ok) return json(502,{error:`${provider === 'gemini' ? 'Gemini' : 'Dịch vụ AI'} trả lỗi ${upstream.status}. Kiểm tra API key, model, quyền truy cập và hạn mức API.`});
         const data = await upstream.json();
-        const answer = data.choices?.[0]?.message?.content;
+        const answer = provider === 'gemini' ? data.candidates?.[0]?.content?.parts?.filter(p=>!p.thought && typeof p.text === 'string').map(p=>p.text).join('\n') : data.choices?.[0]?.message?.content;
         if (typeof answer !== 'string' || !answer.trim()) return json(502,{error:'Dịch vụ AI không trả nội dung văn bản.'});
         return json(200,{answer,agent:input.agent});
       }
